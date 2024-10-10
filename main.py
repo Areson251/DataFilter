@@ -25,7 +25,7 @@ class DataFilter(QtWidgets.QWidget):
         self.annotation = None
         self.new_annotation = {}
         self.images_paths = []
-        self.current_image_index = 0
+        self.current_image_index = 1668
         self.total_images = 0
 
         self.colors_count = 0
@@ -62,7 +62,7 @@ class DataFilter(QtWidgets.QWidget):
         # Control buttons
         self.button_layout = QtWidgets.QVBoxLayout()
         self.button_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_layout.setSpacing(1)
+        self.button_layout.setSpacing(20)
 
         self.prev_button = QtWidgets.QPushButton("<- Previous")
         self.prev_button.clicked.connect(self.show_previous_image)
@@ -84,8 +84,22 @@ class DataFilter(QtWidgets.QWidget):
         self.save_annotation_button.setFixedSize(120, 30)
         self.button_layout.addWidget(self.save_annotation_button)
 
+        self.stop_button = QtWidgets.QPushButton("Stop filtering")
+        self.stop_button.clicked.connect(self.stop_app)
+        self.stop_button.setFixedSize(120, 30)
+        self.button_layout.addWidget(self.stop_button)
+
+        self.total_image_label = QtWidgets.QLabel(f"Images count: {self.total_images}")
+        self.button_layout.addWidget(self.total_image_label)
+
         self.image_id_label = QtWidgets.QLabel(f"Current image id: {self.current_image_index}")
         self.button_layout.addWidget(self.image_id_label)
+
+        self.done_label = QtWidgets.QLabel(f"")
+        self.button_layout.addWidget(self.done_label)
+
+        self.save_label = QtWidgets.QLabel(f"")
+        self.button_layout.addWidget(self.save_label)
 
         # Connect widgets to the layout
         self.layout.addLayout(self.button_layout)
@@ -110,7 +124,15 @@ class DataFilter(QtWidgets.QWidget):
 
         draw = ImageDraw.Draw(self.image)
         for ann in annotations:
-            mask = self.annotation.annToMask(ann)
+            if ann["segmentation"]:
+                mask = self.annotation.annToMask(ann)
+            else:
+                bbox = ann['bbox']  
+                x, y, w, h = map(int, bbox)
+                img_height, img_width = self.image_info[0]['height'], self.image_info[0]['width']
+                mask = np.zeros((img_height, img_width), dtype=np.uint8)
+                mask[y:y+h, x:x+w] = 1
+
             color = self.colors[ann["category_id"]]
             text = self.annotation.loadCats(ann["category_id"])[0]["name"]
 
@@ -126,7 +148,6 @@ class DataFilter(QtWidgets.QWidget):
 
         self.image_id_label.setText(f"Current image id: {self.current_image_index}")
 
-
     def display_image(self, image):
         """Display the original image on the left side."""
         image = image.convert("RGBA")
@@ -140,7 +161,8 @@ class DataFilter(QtWidgets.QWidget):
         if self.current_image_index < self.total_images - 1:
             self.current_image_index += 1
         else:
-            self.current_image_index = 0
+            # self.current_image_index = 0
+            self.done_label.setText(f"YOU WATCHED ALL IMAGES!!!!!")
         self.show_image()
 
     def show_previous_image(self):
@@ -151,32 +173,34 @@ class DataFilter(QtWidgets.QWidget):
         self.show_image()
 
     def save_image(self):
-        image_id = self.current_image_index
-        image_info = self.annotation.loadImgs(image_id)
+        if self.current_image_index < self.total_images - 1:
+            image_id = self.current_image_index
+            image_info = self.annotation.loadImgs(image_id)
 
-        image_path = os.path.join(self.images_path, image_info[0]['file_name'])
-        image = Image.open(image_path).convert("RGB")
+            image_path = os.path.join(self.images_path, image_info[0]['file_name'])
+            image = Image.open(image_path).convert("RGB")
 
-        annotation_ids = self.annotation.getAnnIds(imgIds=image_id)
-        annotations = self.annotation.loadAnns(annotation_ids)
+            annotation_ids = self.annotation.getAnnIds(imgIds=image_id)
+            annotations = self.annotation.loadAnns(annotation_ids)
 
-        categories_ids = {ann["category_id"] for ann in annotations}
-        categories = self.annotation.loadCats(categories_ids)
+            categories_ids = {ann["category_id"] for ann in annotations}
+            categories = self.annotation.loadCats(categories_ids)
 
-        self.new_annotation["images"].append(image_info[0])
-        for ann in annotations:
-            self.new_annotation["annotations"].append(ann)
+            if image_info not in self.new_annotation["images"]:
+                self.new_annotation["images"].append(image_info[0])
 
-        for category in categories:
-            if category not in self.new_annotation["categories"]:
-                self.new_annotation["categories"].append(category)
-    
-        image.save(os.path.join(self.output_path, image_info[0]['file_name']))
+            for ann in annotations:
+                if ann not in self.new_annotation["annotations"]:
+                    self.new_annotation["annotations"].append(ann)
+
+            for category in categories:
+                if category not in self.new_annotation["categories"]:
+                    self.new_annotation["categories"].append(category)
+        
+            image.save(os.path.join(self.output_path, image_info[0]['file_name']))
 
         # Next image
-        if self.current_image_index < self.total_images - 1:
-            self.current_image_index += 1
-            self.show_image()
+        self.show_next_image()
 
     def check_folders(self):
         if not os.path.exists(self.images_path):
@@ -217,8 +241,10 @@ class DataFilter(QtWidgets.QWidget):
 
     def save_annotation(self):
         self.fix_idxs()
-        with open(os.path.join(self.output_path, "annotation.json"), "w") as f:
+        with open(os.path.join(self.output_path, "annotations.json"), "w") as f:
             json.dump(self.new_annotation, f)
+
+        self.save_label.setText(f"Annotations saved")
 
     def setup(self):
         self.colors_count = len(self.annotation.dataset["categories"])
@@ -235,6 +261,8 @@ class DataFilter(QtWidgets.QWidget):
             self.save_image()
         elif event.key() == QtCore.Qt.Key_W:
             self.save_annotation()
+        elif event.key() == QtCore.Qt.Key_Q:
+            self.stop_app()
 
     def load_app(self):
         self.app = QtWidgets.QApplication(sys.argv)

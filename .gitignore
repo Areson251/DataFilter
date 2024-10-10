@@ -1,3 +1,4 @@
 .vscode
 .venv
 datasets
+.DS_Store
