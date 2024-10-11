@@ -25,8 +25,9 @@ class DataFilter(QtWidgets.QWidget):
         self.annotation = None
         self.new_annotation = {}
         self.images_paths = []
-        self.current_image_index = 1668
+        self.current_image_index = 0
         self.total_images = 0
+        self.saved_images_count = 0
 
         self.colors_count = 0
         self.colors = []
@@ -94,6 +95,9 @@ class DataFilter(QtWidgets.QWidget):
 
         self.image_id_label = QtWidgets.QLabel(f"Current image id: {self.current_image_index}")
         self.button_layout.addWidget(self.image_id_label)
+
+        self.image_saved_label = QtWidgets.QLabel(f"Saved images count: {self.saved_images_count}")
+        self.button_layout.addWidget(self.image_saved_label)
 
         self.done_label = QtWidgets.QLabel(f"")
         self.button_layout.addWidget(self.done_label)
@@ -199,6 +203,9 @@ class DataFilter(QtWidgets.QWidget):
         
             image.save(os.path.join(self.output_path, image_info[0]['file_name']))
 
+            self.saved_images_count += 1
+            self.image_saved_label.setText(f"Saved images count: {self.saved_images_count}")
+
         # Next image
         self.show_next_image()
 
@@ -221,7 +228,9 @@ class DataFilter(QtWidgets.QWidget):
         # only images files
         self.images_paths = [f for f in os.listdir(self.images_path) 
                              if f.lower().endswith(IMAGE_EXTENSIONS)]
-        self.total_images = len(self.images_paths)
+    
+        if not self.total_images:
+            self.total_images = len(self.images_paths)
         print(f"Total images: {self.total_images}")
 
     def fix_idxs(self):
