@@ -112,7 +112,7 @@ class DataFilter(QtWidgets.QWidget):
         self.show()
 
     def show_image(self):
-        image_id = self.current_image_index  # Используем индекс как ID
+        image_id = self.current_image_index+1  # Используем индекс как ID
         self.image_info = self.annotation.loadImgs(image_id)
 
         self.image_path = os.path.join(self.images_path, self.image_info[0]['file_name'])
@@ -256,7 +256,7 @@ class DataFilter(QtWidgets.QWidget):
         self.save_label.setText(f"Annotations saved")
 
     def setup(self):
-        self.colors_count = len(self.annotation.dataset["categories"])
+        self.colors_count = len(self.annotation.dataset["categories"]) + 1
         self.colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(self.colors_count)]
         self.font = ImageFont.load_default(size=15)
 

@@ -13,66 +13,24 @@ from pycocotools.coco import COCO
 
 THRESHOLD = 1000
 ALLOWDED_CATEGORIES = {
-    20: 'road',
-    14: 'sidewalk',
-    16: 'bike_lane',
-    15: 'pedestrian_area',
-    10: 'rail_track',
-    11: 'sand',
-    18: 'terrain',
-    19: 'vegetation',
+    'pothole': 1,
+    'duzgun-cop-kutusu': 2,
 }
 
 CATS_PRIORITY = {
-    'firehose': 1,
-    'hose': 2,
-    'wire': 3,
-    'rope': 4,
-    'poop': 5,
-    'manhole': 6,
-    'catch_basin': 7,
-    'pit': 8,
-    'bump': 9,
-    'curb': 10,
-    'puddle': 11,
-    'vegetation': 12,
-    'sand': 13, 
-    'terrain': 14,
-    'sidewalk': 15,
-    'pedestrian_area': 16,
-    'rail_track': 17,
-    'grass': 18,
-    'bike_lane': 19,
-    'road': 20,
+    'pothole': 1,
+    'duzgun-cop-kutusu': 2,
 }
 
 CATS_IDS_ORIG = {
-    'firehose': 1,
-    'hose': 2,
-    'wire': 3,
-    'rope': 4,
-    'poop': 5,
-    'puddle': 6,
-    'pit': 7,
-    'bump': 8,
-    'curb': 9,
-    'rail_track': 10,
-    'sand': 11, 
-    'manhole': 12,
-    'catch_basin': 13,
-    'sidewalk': 14,
-    'pedestrian_area': 15,
-    'bike_lane': 16,
-    'grass': 17,
-    'terrain': 18,
-    'vegetation': 19,
-    'road': 20,
+    'pothole': 1,
+    'duzgun-cop-kutusu': 2,
 }
 
-IMG_IDS = [
-    [(1, 107)],
-    [(1, 300)],
-]
+# IMG_IDS = [
+#     [(1, 107)],
+#     [(1, 300)],
+# ]
 
 class Cleaner():
     def __init__(self, annotation_pth, new_annotation_pth=None) -> None:
@@ -95,14 +53,11 @@ class Cleaner():
             }
 
         self.load_annotation()
-        self.load_annotation_COCO()
 
     def load_annotation(self):
         with open(self.annotation_pth, 'r') as file:
             self.data = json.load(file)
         self.annotations_data = self.data['annotations']
-
-    def load_annotation_COCO(self):
         self.coco = COCO(self.annotation_pth)
 
     def clean(self):
@@ -226,11 +181,15 @@ class Cleaner():
                 continue
 
             sorted_anns = sorted(anns, key=lambda d: CATS_PRIORITY[cat_ids[d['category_id']]]) 
-            height, width = anns[0]['segmentation']['size']
+            img = self.coco.loadImgs(ids=[img_id])[0]
+            height, width = img['height'], img['width']
+            # height, width = anns[0]['segmentation']['size']
             filled_mask = np.zeros((height, width), dtype='uint8')
 
             for ann in sorted_anns:
-                orig_mask = self.rle2mask(ann['segmentation']['counts'], (width, height))
+                orig_mask = self.coco.annToMask(ann)
+                # orig_mask = self.rle2mask(ann['segmentation'][0], (width, height))
+                # orig_mask = self.rle2mask(ann['segmentation']['counts'], (width, height))
                 new_mask = np.where(filled_mask, 0, orig_mask)
                 filled_mask = np.where(orig_mask, orig_mask, filled_mask)
 
@@ -290,6 +249,7 @@ class Cleaner():
             obj_counts[cat_name] = len(anns_ids)
             imgs_with_obj_counts[cat_name] = len(imgs_ids)
 
+        print("TOTAL COUNT OF IMAGES:\n", len(self.coco.dataset['images']))
         print("TOTAL COUNT OF EACH CATEGORY:\n", obj_counts)
         print("COUNT OF IMAGES TO CATEGORY:\n", imgs_with_obj_counts)
         
@@ -384,8 +344,10 @@ class Cleaner():
             image.save(os.path.join(new_images_pth_test + "/", image_name))
 
     def calculate_bbox(self, binary_mask):
-        x = np.where(binary_mask == 255)[1]
-        y = np.where(binary_mask == 255)[0]
+        # x = np.where(binary_mask == 255)[1]
+        # y = np.where(binary_mask == 255)[0]
+        x = np.where(binary_mask == 1)[1]
+        y = np.where(binary_mask == 1)[0]
 
         xmin = x.min()
         xmax = x.max()
@@ -469,11 +431,9 @@ class JoinAnns():
         }
 
     def add_annotations(self, first_annotation, second_annotation, new_annotation_pth):
-        self.add_new_cats(first_annotation, second_annotation, custom_cats=True)
-        # self.add_new_cats(first_annotation, second_annotation)
+        self.add_new_cats(first_annotation, second_annotation)
         self.add_new_imgs(first_annotation, second_annotation)
-        self.add_new_anns(first_annotation, second_annotation, custom_cats=True)
-        # self.add_new_anns(first_annotation, second_annotation)
+        self.add_new_anns(first_annotation, second_annotation)
 
         self.new_annotation_pth = new_annotation_pth
         print('NEW ANNOTATIONS COUNT: ', len(self.new_data['annotations']))
@@ -516,12 +476,10 @@ class JoinAnns():
     def add_new_imgs(self, first_annotation, second_annotation):
         print("PREPARE IMAGES")
 
-        for ids_tuple in IMG_IDS[0]:
-            self.first_imgs += self.add_imgs_data(first_annotation, ids_tuple)  # add img data for first annotation
+        self.first_imgs += self.add_imgs_data(first_annotation)  # add img data for first annotation
         self.new_data['images'] = self.first_imgs.copy()
 
-        for ids_tuple in IMG_IDS[1]:
-            self.second_imgs += self.add_imgs_data(second_annotation, ids_tuple)  # add img data for second annotation
+        self.second_imgs += self.add_imgs_data(second_annotation)  # add img data for second annotation
 
         self.second2new_imgs_ids = {}
         imgs_names = {img['file_name']: img['id'] for img in self.first_imgs}
@@ -578,8 +536,11 @@ class JoinAnns():
 
                 self.new_data['annotations'].append(ann)
 
-    def add_imgs_data(self, data, id_range):
-        imgIds = [x for x in range(id_range[0], id_range[1]+1)]
+    def add_imgs_data(self, data, id_range=0):
+        if id_range:
+            imgIds = [x for x in range(id_range[0], id_range[1]+1)]
+        else: 
+            imgIds = [x for x in range(0, len(data.data['images']))]
         return data.coco.loadImgs(ids=imgIds) 
 
     def get_anns(self, img_data, data):
@@ -616,24 +577,24 @@ class JoinAnns():
 def main(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--annotation_path', help='Path to the user annotation of images', default='images/')
-    parser.add_argument('--second_annotation_path', help='Path to the user annotation of images', default='images/')
+    parser.add_argument('--second_annotation_path', help='Path to the user annotation of images', default='None')
     parser.add_argument('--new_annotation_path', help='Path to the user annotation of images', default='images/')
     cmdline_args = parser.parse_args()
     annotation_pth = cmdline_args.annotation_path
-    second_annotation_path = cmdline_args.second_annotation_path
+    # second_annotation_path = cmdline_args.second_annotation_path
     new_annotation_pth = cmdline_args.new_annotation_path
 
     first_annotation = Cleaner(annotation_pth, new_annotation_pth)
-    second_annotation = Cleaner(second_annotation_path, new_annotation_pth)
+    # second_annotation = Cleaner(second_annotation_path, new_annotation_pth)
 
     # first_annotation.fix_ids()
     # first_annotation.concatenate_masks()
 
-    join = JoinAnns()
-    join.add_annotations(first_annotation, second_annotation, new_annotation_pth)
+    # join = JoinAnns()
+    # join.add_annotations(first_annotation, second_annotation, new_annotation_pth)
 
     # first_annotation.join_annotations()
-    # first_annotation.show_statics()
+    first_annotation.show_statics()
 
     # first_annotation.split_train_test(test_size=261, folder_pth='datasets/nkb_v1.0_full/3141')
 
